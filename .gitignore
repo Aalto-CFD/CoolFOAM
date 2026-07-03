@@ -67,6 +67,9 @@ platforms/
 /.dir-locals.el
 /.ycm*
 
+# Ignore third-party includes
+/include
+
 # Ignore the tutorials/log file
 /tutorials/log
 

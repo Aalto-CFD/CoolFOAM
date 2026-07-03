@@ -1,0 +1,33 @@
+#!/bin/sh
+cd ${0%/*} || exit 1    # Run from this directory
+
+# Parse arguments for library compilation
+. $WM_PROJECT_DIR/wmake/scripts/AllwmakeParseArguments
+
+# Download the pre-built CoolProp library with the CoolPropLib.h header
+: "${COOLPROP_VERSION:=8.0.0}"
+
+base="https://sourceforge.net/projects/coolprop/files/CoolProp"
+src="${base}/${COOLPROP_VERSION}/shared_library"
+
+# --fail so an HTTP error page is not silently saved as the header/library
+[ -e include/CoolPropLib.h ] || \
+    curl -fLO "${src}/CoolPropLib.h" \
+        --output-dir include --create-dirs || exit 1
+
+if [ ! -e "${FOAM_SITE_LIBBIN}/libCoolProp.so" ]
+then
+    curl -fLO "${src}/$(uname)/64bit/libCoolProp.so" \
+        --output-dir "${FOAM_SITE_LIBBIN}" --create-dirs || exit 1
+
+    chmod +x "${FOAM_SITE_LIBBIN}/libCoolProp.so"
+fi
+
+ln -sf libCoolProp.so \
+    "${FOAM_SITE_LIBBIN}/libCoolProp.so.${COOLPROP_VERSION}"
+ln -sf libCoolProp.so \
+    "${FOAM_SITE_LIBBIN}/libCoolProp.so.${COOLPROP_VERSION%%.*}"
+
+wmake $targetType
+
+#------------------------------------------------------------------------------
