@@ -30,9 +30,8 @@ Authors
     stanislau.stasheuski[at]aalto.fi
 
 Description
-    The thermophysical properties of a liquid evaluated by the CoolProp
-    library (https://coolprop.org) through the low-level interface of its
-    shared library, for use with the standard liquid thermodynamics packages:
+    Thermophysical properties wrapper to evaluate the standard CoolProp
+    thermodynamics packages through its low-level interface.
 
     \verbatim
     thermoType
@@ -43,44 +42,13 @@ Description
         energy          sensibleInternalEnergy;
     }
 
+    // Any CoolProp fluid name with optional explicit backend prefix
+    // https://coolprop.org/fluid_properties/PurePseudoPure.html
     mixture
     {
-        // Any CoolProp fluid name, see
-        // https://coolprop.org/fluid_properties/PurePseudoPure.html
-        H2O;
-
-        // REFPROP::H2O;  // Optional explicit backend prefix
+        BICUBIC&HEOS::H2O;
     }
     \endverbatim
-
-    Liquid-phase properties are evaluated from a pressure-temperature flash
-    with an imposed liquid phase, which extends smoothly into the metastable
-    region beyond saturation in the same spirit as the extrapolated built-in
-    liquid correlations; if the flash fails the saturated-liquid state at the
-    given temperature is used instead. Vapour properties (Cpg, mug, kappag)
-    use the corresponding gas-phase flash, and saturation properties (pv, hl,
-    sigma) a quality-temperature flash.
-
-    The absolute enthalpy ha is relative to the CoolProp reference state of
-    the fluid and hf is defined as ha at standard conditions, so the sensible
-    energies are reference-independent; the absolute energy types are
-    therefore not meaningful with this class. The vapour diffusivity D is not
-    provided by CoolProp and falls back to the generic API vapour mass
-    diffusivity function with the coefficients used by the built-in liquids.
-
-    Limitations, shared with the built-in liquidProperties contract:
-      - The equation of state is reported as incompressible (psi = 0,
-        CpMCv = 0) although the density returned by the pressure-temperature
-        flash does depend on pressure; the pressure dependence is therefore
-        not seen by the compressibility terms, which is accurate away from
-        the critical region and degrades as the critical point is approached.
-      - The saturated-liquid fallback evaluates derivative outputs (alphav,
-        Cp) at the Q = 0 endpoint; a backend that refuses first derivatives
-        exactly on the saturation line would raise a fatal error there.
-      - In the region where the single-phase flash fails, every evaluation
-        pays a failed pressure-temperature flash before the saturated
-        fallback; this is the cost of the metastable extension and matters
-        only for cases sitting deep beyond saturation.
 
     Reference:
     \verbatim
