@@ -36,6 +36,13 @@ using namespace Foam::constant::thermodynamic;
 namespace Foam
 {
     defineTypeNameAndDebug(coolPropProperties, 0);
+
+    const NamedEnum<coolPropProperties::phaseType, 2>
+    coolPropProperties::phaseTypeNames
+    {
+        "liquid",
+        "gas"
+    };
 }
 
 // * * * * * * * * * * * * * * * * Local Functions * * * * * * * * * * * * * //
@@ -52,7 +59,8 @@ static const long coolPropMsgLen = 1000;
 struct coolPropIndices
 {
     const long PT, QT, PQ;
-    const long T, p, rho, Cp, Cp0, h, s, mu, kappa, sigma, alphav;
+    const long T, p, rho, Cp, Cp0, Cv, u, h, s, mu, kappa, sigma, alphav,
+        kappaT;
     const long Tc, pc, rhoc, Tt, pt, W, omega;
 
     coolPropIndices()
@@ -65,12 +73,15 @@ struct coolPropIndices
         rho(get_param_index("Dmass")),
         Cp(get_param_index("Cpmass")),
         Cp0(get_param_index("Cp0mass")),
+        Cv(get_param_index("Cvmass")),
+        u(get_param_index("Umass")),
         h(get_param_index("Hmass")),
         s(get_param_index("Smass")),
         mu(get_param_index("viscosity")),
         kappa(get_param_index("conductivity")),
         sigma(get_param_index("surface_tension")),
         alphav(get_param_index("isobaric_expansion_coefficient")),
+        kappaT(get_param_index("isothermal_compressibility")),
         Tc(get_param_index("T_critical")),
         pc(get_param_index("p_critical")),
         rhoc(get_param_index("rhomolar_critical")),
@@ -293,6 +304,7 @@ static scalar coolPropTb(const long state, const word& fluid)
     }
 }
 
+
 } // End namespace Foam
 
 
@@ -380,12 +392,19 @@ long Foam::coolPropProperties::saturation(scalar Q, scalar T) const
 }
 
 
+long Foam::coolPropProperties::primaryState(scalar p, scalar T) const
+{
+    return phase_ == phaseType::gas ? vapour(p, T) : liquid(p, T);
+}
+
+
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
 Foam::coolPropProperties::coolPropProperties
 (
     const word& fluid,
-    const long state
+    const long state,
+    const phaseType phase
 )
 :
     liquidProperties
@@ -423,23 +442,35 @@ Foam::coolPropProperties::coolPropProperties
     sigmaT_(-vGreat),
     sigma_(0),
     D_("D", 15.0, 15.0, W(), 28),
-    hf_(0)
+    phase_(phase),
+    hf_(0),
+    ef_(0)
 {
-    // The offset between the absolute enthalpy, which is relative to the
-    // CoolProp reference state of the fluid, and the sensible enthalpy
+    // The offset between the absolute enthalpy/internal energy, which are
+    // relative to the CoolProp reference state of the fluid, and the
+    // sensible enthalpy/internal energy
     hf_ = ha(pStd, Tstd);
+    ef_ = ea(pStd, Tstd);
 }
 
 
-Foam::coolPropProperties::coolPropProperties(const word& fluid)
+Foam::coolPropProperties::coolPropProperties
+(
+    const word& fluid,
+    const phaseType phase
+)
 :
-    coolPropProperties(fluid, newCoolPropState(fluid))
+    coolPropProperties(fluid, newCoolPropState(fluid), phase)
 {}
 
 
 Foam::coolPropProperties::coolPropProperties(const dictionary& dict)
 :
-    coolPropProperties(dict.lookupOrDefault<word>("fluid", dict.dictName()))
+    coolPropProperties
+    (
+        dict.lookupOrDefault<word>("fluid", dict.dictName()),
+        phaseTypeNames.lookupOrDefault("phase", dict, phaseType::liquid)
+    )
 {}
 
 
@@ -461,7 +492,9 @@ Foam::coolPropProperties::coolPropProperties(const coolPropProperties& cpp)
     sigmaT_(-vGreat),
     sigma_(0),
     D_(cpp.D_),
-    hf_(cpp.hf_)
+    phase_(cpp.phase_),
+    hf_(cpp.hf_),
+    ef_(cpp.ef_)
 {}
 
 
@@ -469,7 +502,8 @@ Foam::coolPropProperties::coolPropProperties(const coolPropProperties& cpp)
 
 Foam::autoPtr<Foam::coolPropProperties> Foam::coolPropProperties::New
 (
-    const word& fluid
+    const word& fluid,
+    const phaseType phase
 )
 {
     if (debug)
@@ -477,7 +511,7 @@ Foam::autoPtr<Foam::coolPropProperties> Foam::coolPropProperties::New
         InfoInFunction << "Constructing coolPropProperties" << endl;
     }
 
-    return autoPtr<coolPropProperties>(new coolPropProperties(fluid));
+    return autoPtr<coolPropProperties>(new coolPropProperties(fluid, phase));
 }
 
 
@@ -509,19 +543,49 @@ Foam::coolPropProperties::~coolPropProperties()
 
 Foam::scalar Foam::coolPropProperties::rho(scalar p, scalar T) const
 {
-    return coolPropOutput(liquid(p, T), coolProp().rho, fluid_);
+    return coolPropOutput(primaryState(p, T), coolProp().rho, fluid_);
 }
 
 
 Foam::scalar Foam::coolPropProperties::alphav(scalar p, scalar T) const
 {
-    return coolPropOutput(liquid(p, T), coolProp().alphav, fluid_);
+    return coolPropOutput(primaryState(p, T), coolProp().alphav, fluid_);
+}
+
+
+Foam::scalar Foam::coolPropProperties::psi(scalar p, scalar T) const
+{
+    if (phase_ == phaseType::liquid)
+    {
+        return 0;
+    }
+
+    const long state = primaryState(p, T);
+
+    return
+        coolPropOutput(state, coolProp().rho, fluid_)
+       *coolPropOutput(state, coolProp().kappaT, fluid_);
+}
+
+
+Foam::scalar Foam::coolPropProperties::CpMCv(scalar p, scalar T) const
+{
+    if (phase_ == phaseType::liquid)
+    {
+        return 0;
+    }
+
+    const long state = primaryState(p, T);
+
+    return
+        coolPropOutput(state, coolProp().Cp, fluid_)
+      - coolPropOutput(state, coolProp().Cv, fluid_);
 }
 
 
 Foam::scalar Foam::coolPropProperties::Cp(scalar p, scalar T) const
 {
-    return coolPropOutput(liquid(p, T), coolProp().Cp, fluid_);
+    return coolPropOutput(primaryState(p, T), coolProp().Cp, fluid_);
 }
 
 
@@ -539,13 +603,30 @@ Foam::scalar Foam::coolPropProperties::hf() const
 
 Foam::scalar Foam::coolPropProperties::ha(scalar p, scalar T) const
 {
-    return coolPropOutput(liquid(p, T), coolProp().h, fluid_);
+    return coolPropOutput(primaryState(p, T), coolProp().h, fluid_);
+}
+
+
+Foam::scalar Foam::coolPropProperties::ea(scalar p, scalar T) const
+{
+    if (phase_ == phaseType::liquid)
+    {
+        return ha(p, T);
+    }
+
+    return coolPropOutput(primaryState(p, T), coolProp().u, fluid_);
+}
+
+
+Foam::scalar Foam::coolPropProperties::es(scalar p, scalar T) const
+{
+    return ea(p, T) - ef_;
 }
 
 
 Foam::scalar Foam::coolPropProperties::s(scalar p, scalar T) const
 {
-    return coolPropOutput(liquid(p, T), coolProp().s, fluid_);
+    return coolPropOutput(primaryState(p, T), coolProp().s, fluid_);
 }
 
 
@@ -597,7 +678,7 @@ Foam::scalar Foam::coolPropProperties::Cpg(scalar p, scalar T) const
 
 Foam::scalar Foam::coolPropProperties::mu(scalar p, scalar T) const
 {
-    return coolPropOutput(liquid(p, T), coolProp().mu, fluid_);
+    return coolPropOutput(primaryState(p, T), coolProp().mu, fluid_);
 }
 
 
@@ -609,7 +690,7 @@ Foam::scalar Foam::coolPropProperties::mug(scalar p, scalar T) const
 
 Foam::scalar Foam::coolPropProperties::kappa(scalar p, scalar T) const
 {
-    return coolPropOutput(liquid(p, T), coolProp().kappa, fluid_);
+    return coolPropOutput(primaryState(p, T), coolProp().kappa, fluid_);
 }
 
 
@@ -677,6 +758,12 @@ Foam::scalar Foam::coolPropProperties::pvInvert(scalar p) const
 void Foam::coolPropProperties::write(Ostream& os) const
 {
     writeEntry(os, "fluid", fluid_);
+
+    if (phase_ == phaseType::gas)
+    {
+        writeEntry(os, "phase", phaseTypeNames[phase_]);
+    }
+
     liquidProperties::write(os);
 }
 

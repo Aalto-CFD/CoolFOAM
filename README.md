@@ -2,16 +2,24 @@
 # CoolFOAM
 The [CoolProp](https://coolprop.org/) wrapper for [OpenFOAM](https://github.com/OpenFOAM/OpenFOAM-dev).
 
-## Overview
-A fluid properties model that evaluates the thermophysical liquid properties
-using the [CoolProp](https://coolprop.org) library.
-It is a drop-in `liquidProperties` model, so any solver built on the standard
-thermodynamics packages can use any CoolProp fluid (optionally REFPROP-,
-PCSAFT-backed) without code changes.
+## What it does
+- Evaluates the thermophysical properties of a liquid or a gas through the
+  [CoolProp](https://coolprop.org) library, as a drop-in `liquidProperties`
+  model: any solver built on the standard thermodynamics packages can use any
+  CoolProp fluid without code changes.
+- Supports the optional CoolProp backends (`REFPROP::`, `PCSAFT::`,
+  `BICUBIC&HEOS::`, ...) via the usual name prefix.
+- Uses the low-level C interface of the CoolProp shared library, which the
+  build downloads pre-built — CoolProp is never compiled locally.
 
-Properties are obtained through the low-level C interface of the CoolProp
-shared library, which the build downloads pre-built, so CoolProp does not need
-to be compiled locally.
+## What it does not do
+- Mixtures: one pure (or pseudo-pure) fluid per phase, through `pureMixture`.
+- Vapour diffusivity `D` is not provided by CoolProp; it falls back to the
+  generic API vapour mass diffusivity function with the built-in liquids'
+  coefficients.
+- Absolute-energy thermo types: `hf`/`ef` are the CoolProp reference-state
+  offsets, not heats of formation, so only the sensible energies are
+  meaningful.
 
 ## Usage
 Load the library in `system/controlDict`:
@@ -28,56 +36,64 @@ thermoType
     energy      sensibleInternalEnergy;
 }
 
-// Any CoolProp fluid name with optional explicit backend prefix
+// Any CoolProp fluid name, with optional backend prefix:
+// H2O; BICUBIC&HEOS::PROPANE; PCSAFT::PROPANE;
+// REFPROP::IOCTANE (requires COOLPROP_REFPROP_ROOT to be set)
+// https://coolprop.org/fluid_properties/PurePseudoPure.html
 mixture
 {
-    // Option 1:
     H2O;
 
-    // Option 2:
-    BICUBIC&HEOS::PROPANE;
-
-    // Option 3:
-    REFPROP::IOCTANE; // requires COOLPROP_REFPROP_ROOT to be set
-
-    // Option 4:
-    PCSAFT::PROPANE;
-
-    // See more here: https://coolprop.org/fluid_properties/PurePseudoPure.html
+    // Optional; "liquid" (default) or "gas" -- see below
+    phase           gas;
 }
 ```
 
-### Property evaluation
-- Liquid-phase properties come from a pressure-temperature flash with an
-  imposed liquid phase, which extends smoothly into the metastable region
-  beyond saturation in the same spirit as the extrapolated built-in liquid
-  correlations. If the flash fails, the saturated-liquid state at the given
-  temperature is used instead.
-- Vapour properties (`Cpg`, `mug`, `kappag`) use the corresponding gas-phase
-  flash, and saturation properties (`pv`, `hl`, `sigma`) a quality-temperature
-  flash.
-- The absolute enthalpy `ha` is relative to the CoolProp reference state of the
-  fluid and `hf` is `ha` at standard conditions, so the sensible energies are
-  reference-independent; the absolute-energy types are therefore not meaningful
-  with this model.
-- The vapour diffusivity `D` is not provided by CoolProp and falls back to the
-  generic API vapour mass diffusivity function with the coefficients used by
-  the built-in liquids.
+### Liquid vs gas role
+The `phase` entry selects which imposed-phase flash the primary properties
+(`rho`, `alphav`, `Cp`, `ha`, `ea`, `s`, `mu`, `kappa`, `psi`, `CpMCv`) come
+from:
 
-### Limitations
-These are shared with the built-in `liquidProperties` contract:
-- The equation of state is reported as incompressible (`psi = 0`, `CpMCv = 0`)
-  even though the density from the pressure-temperature flash depends on
-  pressure, so the compressibility terms do not see that pressure dependence.
-  This is accurate away from the critical region and degrades as the critical
-  point is approached.
-- The saturated-liquid fallback evaluates derivative outputs (`alphav`, `Cp`)
-  at the Q = 0 endpoint; a backend that refuses first derivatives exactly on
-  the saturation line raises a fatal error there.
-- In the region where the single-phase flash fails, every evaluation pays a
-  failed pressure-temperature flash before the saturated fallback. This is the
-  cost of the metastable extension and matters only for cases sitting deep
-  beyond saturation.
+- **Liquid** (default): liquid-imposed flash, keeping the incompressible
+  `liquidProperties` contract (`psi = 0`, `CpMCv = 0`, `ea = ha`).
+- **Gas**: gas-imposed flash, with `psi`, `CpMCv` and `ea`/`es` reporting the
+  real CoolProp compressibility, `Cp - Cv` and internal energy. Use it where
+  the liquid role is not meaningful — a permanent gas such as Air at ambient
+  temperature (`T >> Tc`), or the vapour phase of a two-phase VoF case.
+
+Vapour-companion and saturation properties (`Cpg`, `mug`, `kappag`, `pv`,
+`hl`, `sigma`, `pvInvert`, `Tb`, `D`) are unaffected by `phase`.
+
+## How it works
+- Primary properties come from a pressure-temperature flash with the imposed
+  phase, which extends smoothly into the metastable region beyond saturation,
+  in the same spirit as the extrapolated built-in liquid correlations. If the
+  flash fails, the saturated state of that phase at the given temperature is
+  used instead.
+- Vapour-companion properties use a gas-phase flash; saturation properties a
+  quality-temperature flash.
+- `ha`/`ea` are relative to the CoolProp reference state of the fluid, and
+  `hf`/`ef` are their values at standard conditions, so the sensible energies
+  are reference-independent.
+
+## Limitations
+Shared with the built-in `liquidProperties` contract:
+- **Liquid role is incompressible** (`psi = 0`, `CpMCv = 0`) even though the
+  flash density does depend on pressure — accurate away from the critical
+  region, degrading as it is approached. The gas role reports the real
+  values and does not have this limitation.
+- **Saturated fallback sits at `psat(T)`, not the requested `p`**, so beyond
+  the metastable region the pressure dependence is lost and identities
+  combining a primary property with the input `p` (e.g. `ha - ea` vs
+  `p/rho`) hold only where the direct flash succeeds. Derivative outputs
+  (`alphav`, `Cp`, gas-role `psi`/`CpMCv`) are evaluated at the saturation
+  endpoint (`Q = 0` liquid, `Q = 1` gas); a backend that refuses first
+  derivatives exactly on the saturation line raises a fatal error there
+  (the default HEOS backend works — `Test-coolPropProperties` exercises
+  this path).
+- **Fallback costs a failed flash**: in the region where the single-phase
+  flash fails, every evaluation pays a failed pressure-temperature flash
+  first. Matters only for cases sitting deep beyond saturation.
 
 ## Compilation
 CoolFOAM is normally consumed as a git submodule of Aalto's `foamSite` and

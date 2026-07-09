@@ -1,4 +1,5 @@
 coolPropProperties/coolPropProperties.C
+coolPropProperties/coolPropPropertiesSelector.C
 coolPropThermo/coolPropThermos.C
 
 LIB = $(FOAM_SITE_LIBBIN)/libthermophysicalProperties_aalto

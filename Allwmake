@@ -29,5 +29,6 @@ ln -sf libCoolProp.so \
     "${FOAM_SITE_LIBBIN}/libCoolProp.so.${COOLPROP_VERSION%%.*}"
 
 wmake $targetType
+wmake test/coolPropProperties
 
 #------------------------------------------------------------------------------

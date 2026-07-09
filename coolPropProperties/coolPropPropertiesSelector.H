@@ -35,6 +35,7 @@ Description
     Mirrors Foam::liquidPropertiesSelector.
 
 SourceFiles
+    coolPropPropertiesSelector.C
     coolPropPropertiesSelectorI.H
 
 \*---------------------------------------------------------------------------*/
@@ -66,6 +67,13 @@ public:
         using
             thermophysicalPropertiesSelector<coolPropProperties>::
             thermophysicalPropertiesSelector;
+
+        //- Construct from name and dictionary, normalising the flat
+        //  mixture form (e.g. "H2O; phase gas;") into the nested sub-dict
+        //  form ("H2O { phase gas; }") expected by the base selector.
+        //  Shadows (rather than being brought in by) the inherited
+        //  constructor of the same signature.
+        coolPropPropertiesSelector(const word& name, const dictionary& dict);
 
 
     //- Destructor

@@ -1,0 +1,3 @@
+Test-coolPropProperties.C
+
+EXE = $(FOAM_SITE_APPBIN)/Test-coolPropProperties
