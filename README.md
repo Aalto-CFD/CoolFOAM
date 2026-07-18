@@ -4,9 +4,10 @@ The [CoolProp](https://coolprop.org/) wrapper for [OpenFOAM](https://github.com/
 
 ## What it does
 - Evaluates the thermophysical properties of a liquid or a gas through the
-  [CoolProp](https://coolprop.org) library, as a drop-in `liquidProperties`
-  model: any solver built on the standard thermodynamics packages can use any
-  CoolProp fluid without code changes.
+  [CoolProp](https://coolprop.org) library, as a drop-in thermodynamics
+  package (`coolprop` transport, thermo and equation of state): any solver
+  built on the standard thermodynamics packages can use any CoolProp fluid
+  without code changes.
 - Supports the optional CoolProp backends (`REFPROP::`, `PCSAFT::`,
   `BICUBIC&HEOS::`, ...) via the usual name prefix.
 - Uses the low-level C interface of the CoolProp shared library, which the
@@ -17,37 +18,74 @@ The [CoolProp](https://coolprop.org/) wrapper for [OpenFOAM](https://github.com/
 - Vapour diffusivity `D` is not provided by CoolProp; it falls back to the
   generic API vapour mass diffusivity function with the built-in liquids'
   coefficients.
-- Absolute-energy thermo types: `hf`/`ef` are the CoolProp reference-state
-  offsets, not heats of formation, so only the sensible energies are
-  meaningful.
+- Absolute-energy thermo types: the enthalpy reference is the CoolProp
+  reference state of the fluid, not a heat of formation, so by default only
+  the sensible energies are meaningful — the optional `hf`/`sf` offsets of
+  the `thermodynamics` model can be used to re-align the references.
 
 ## Usage
 Load the library in `system/controlDict`:
 ```cpp
-libs            ( "libthermophysicalProperties_aalto.so" );
+libs            ( "libspecie_coolprop.so" );
 ```
-and select the `coolprop` properties in the thermophysical dictionary:
+and select the `coolprop` models in the thermophysical dictionary
+(`constant/physicalProperties`):
 ```cpp
 thermoType
 {
-    type        heRhoThermo;
-    properties  coolprop;
-    mixture     pureMixture;
-    energy      sensibleInternalEnergy;
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       coolprop;
+    thermo          coolprop;
+    equationOfState coolprop;
+    specie          specie;
+    energy          sensibleInternalEnergy;
 }
 
-// Any CoolProp fluid name, with optional backend prefix:
-// H2O; BICUBIC&HEOS::PROPANE; PCSAFT::PROPANE;
-// REFPROP::IOCTANE (requires COOLPROP_REFPROP_ROOT to be set)
-// https://coolprop.org/fluid_properties/PurePseudoPure.html
 mixture
 {
-    H2O;
+    // Any CoolProp fluid name, with optional backend prefix:
+    // H2O; BICUBIC&HEOS::PROPANE; PCSAFT::PROPANE;
+    // REFPROP::IOCTANE (requires COOLPROP_REFPROP_ROOT to be set)
+    // https://coolprop.org/fluid_properties/PurePseudoPure.html
+    equationOfState
+    {
+        type            coolprop;
+        fluid           BICUBIC&HEOS::H2O;
 
-    // Optional; "liquid" (default) or "gas" -- see below
-    phase           gas;
+        // Optional; "liquid" (default) or "gas" -- see below
+        phase           gas;
+    }
+
+    // The other layers usually reference the same fluid specification
+    thermodynamics
+    {
+        $equationOfState;
+
+        // Optional offsets added to the CoolProp reference enthalpy and
+        // entropy (the Hf/Sf of the CoolFOAM paper), e.g. to align the
+        // absolute-energy references of two phases
+        hf              0;
+        sf              0;
+    }
+    transport
+    {
+        mu              { $equationOfState; }
+        kappa           { $equationOfState; }
+    }
 }
 ```
+The `specie` sub-dictionary is honoured when present but is not needed: by
+default the molecular weight comes from CoolProp. Each model sub-dictionary
+carries its own `fluid`/`phase` spec (mirroring the built-in `NSRDS` models,
+whose coefficients are also given per model), which the `$equationOfState`
+macro keeps in sync above.
+
+The layout and idiom mirror upstream `src/thermophysicalModels/specie`
+(`equationOfState/`, `thermo/`, `transport/`, `thermophysicalFunctions/`,
+`include/forCoolprop.H`), following the CoolFOAM reference implementation
+(Fadiga, Casari, Suman & Pinelli, *Comput. Phys. Commun.* 250 (2020)
+107047) on the current OpenFOAM-dev thermodynamics architecture.
 
 ### Liquid vs gas role
 The `phase` entry selects which imposed-phase flash the primary properties
@@ -63,6 +101,23 @@ from:
 
 Vapour-companion and saturation properties (`Cpg`, `mug`, `kappag`, `pv`,
 `hl`, `sigma`, `pvInvert`, `Tb`, `D`) are unaffected by `phase`.
+
+### Saturation properties as Function1s (surface tension, pSat, Tsat)
+A `coolprop` Function1 exposes the saturation-curve properties wherever a
+`Function1` is accepted. Surface tension in a VoF case (`phaseProperties`):
+```cpp
+sigma
+{
+    type            temperatureDependent;
+    sigma           { type coolprop; fluid H2O; property sigma; }
+}
+```
+and likewise `property pSat;` (of `T`), `Tsat;` (of `p`) or `hl;` (of `T`)
+in e.g. cavitation model dictionaries:
+```cpp
+pSat            { type coolprop; fluid H2O; property pSat; }
+Tsat            { type coolprop; fluid H2O; property Tsat; }
+```
 
 ## How it works
 - Primary properties come from a pressure-temperature flash with the imposed
@@ -89,7 +144,7 @@ Shared with the built-in `liquidProperties` contract:
   (`alphav`, `Cp`, gas-role `psi`/`CpMCv`) are evaluated at the saturation
   endpoint (`Q = 0` liquid, `Q = 1` gas); a backend that refuses first
   derivatives exactly on the saturation line raises a fatal error there
-  (the default HEOS backend works — `Test-coolPropProperties` exercises
+  (the default HEOS backend works — `Test-coolpropProperties` exercises
   this path).
 - **Fallback costs a failed flash**: in the region where the single-phase
   flash fails, every evaluation pays a failed pressure-temperature flash
@@ -116,5 +171,5 @@ wmake -all $PWD
 ```sh
 FOAM_SITE_LIBBIN=$FOAM_USER_LIBBIN wmake -all $PWD
 ```
-This places `libthermophysicalProperties_aalto.so` and the downloaded CoolProp
+This places `libspecie_coolprop.so` and the downloaded CoolProp
 library under your `$FOAM_USER_LIBBIN` directory.

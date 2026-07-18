@@ -11,7 +11,7 @@ base="https://sourceforge.net/projects/coolprop/files/CoolProp"
 src="${base}/${COOLPROP_VERSION}/shared_library"
 
 # --fail so an HTTP error page is not silently saved as the header/library
-[ -e include/CoolPropLib.h ] || \
+[ -e include/CoolPropLib.h ] ||
     curl -fLO "${src}/CoolPropLib.h" \
         --output-dir include --create-dirs || exit 1
 
@@ -23,12 +23,16 @@ then
     chmod +x "${FOAM_SITE_LIBBIN}/libCoolProp.so"
 fi
 
+# The library's SONAME is libCoolProp.so.<major>, which the dependent
+# libraries record as their runtime dependency; without these links the
+# dynamic linker cannot resolve it
 ln -sf libCoolProp.so \
     "${FOAM_SITE_LIBBIN}/libCoolProp.so.${COOLPROP_VERSION}"
 ln -sf libCoolProp.so \
     "${FOAM_SITE_LIBBIN}/libCoolProp.so.${COOLPROP_VERSION%%.*}"
 
 wmake $targetType
-wmake test/coolPropProperties
+wmake test/coolpropProperties
+wmake test/coolpropThermo
 
 #------------------------------------------------------------------------------

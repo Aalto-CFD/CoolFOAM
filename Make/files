@@ -1,5 +1,5 @@
-coolPropProperties/coolPropProperties.C
-coolPropProperties/coolPropPropertiesSelector.C
-coolPropThermo/coolPropThermos.C
+thermophysicalFunctions/coolprop/coolpropProperties.C
+thermophysicalFunctions/coolprop/coolprop.C
+coolpropThermos.C
 
-LIB = $(FOAM_SITE_LIBBIN)/libthermophysicalProperties_aalto
+LIB = $(FOAM_SITE_LIBBIN)/libspecie_coolprop

@@ -6,4 +6,4 @@ EXE_INC = \
 EXE_LIBS = \
     -lthermophysicalProperties \
     -lspecie \
-    -L$(FOAM_SITE_LIBBIN) -lthermophysicalProperties_aalto
+    -L$(FOAM_SITE_LIBBIN) -lspecie_coolprop

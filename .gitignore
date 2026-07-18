@@ -68,7 +68,7 @@ platforms/
 /.ycm*
 
 # Ignore third-party includes
-/include
+/include/CoolPropLib.h
 
 # Ignore the tutorials/log file
 /tutorials/log

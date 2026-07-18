@@ -1,0 +1,3 @@
+Test-coolpropThermo.C
+
+EXE = $(FOAM_SITE_APPBIN)/Test-coolpropThermo

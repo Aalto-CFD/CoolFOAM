@@ -23,10 +23,10 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Application
-    Test-coolPropProperties
+    Test-coolpropProperties
 
 Description
-    Prints the coolPropProperties of the fluids given as arguments (H2O and
+    Prints the coolpropProperties of the fluids given as arguments (H2O and
     Air if none are given) over a few liquid states and, when a built-in
     OpenFOAM liquid of the same name exists, the built-in properties for
     comparison.
@@ -44,7 +44,7 @@ Authors
 
 \*---------------------------------------------------------------------------*/
 
-#include "coolPropProperties.H"
+#include "coolpropProperties.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -90,8 +90,8 @@ void printProperties(const liquidProperties& l, scalar p, scalar T)
 // referenced to the same CoolProp state so offsets cancel)
 void printGasProperties
 (
-    const coolPropProperties& g,
-    const coolPropProperties& l,
+    const coolpropProperties& g,
+    const coolpropProperties& l,
     scalar p,
     scalar T
 )
@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
     {
         const word& fluid = fluids[fluidi];
 
-        autoPtr<coolPropProperties> coolPtr(coolPropProperties::New(fluid));
+        autoPtr<coolpropProperties> coolPtr(coolpropProperties::New(fluid));
 
         Info<< nl << "CoolProp " << fluid << ":" << endl;
         printConstants(coolPtr());
@@ -168,9 +168,9 @@ int main(int argc, char *argv[])
         }
 
         // Gas role
-        autoPtr<coolPropProperties> gasPtr
+        autoPtr<coolpropProperties> gasPtr
         (
-            coolPropProperties::New(fluid, coolPropProperties::phaseType::gas)
+            coolpropProperties::New(fluid, coolpropProperties::phaseType::gas)
         );
 
         Info<< nl << "CoolProp " << fluid << " (gas role):" << endl;

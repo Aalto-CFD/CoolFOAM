@@ -7,7 +7,7 @@
 -------------------------------------------------------------------------------
 License
     This file is originating from OpenFOAM but modified by authors described
-    in the according header file.
+    below.
 
     OpenFOAM is free software: you can redistribute it and/or modify it
     under the terms of the GNU General Public License as published by
@@ -22,30 +22,47 @@ License
     You should have received a copy of the GNU General Public License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
+Authors
+    Henry Weller, CFD-Direct, 2017-2023.
+
+    Stanislau Stasheuski, Aalto University, 2026.
+    stanislau.stasheuski[at]aalto.fi
+
+Description
+    Instantiation of the fluid thermodynamics packages for the Coolprop
+    properties, selected by
+
+    \verbatim
+    thermoType
+    {
+        type            heRhoThermo;
+        mixture         pureMixture;
+        transport       coolprop;
+        thermo          coolprop;
+        equationOfState coolprop;
+        specie          specie;
+        energy          sensibleInternalEnergy;
+    }
+    \endverbatim
+
+    Mirrors the instantiations of the built-in NSRDS liquid properties in
+    $FOAM_SRC/thermophysicalModels/basic/rhoFluidThermo/rhoFluidThermos.C.
+
 \*---------------------------------------------------------------------------*/
 
-#include "coolPropPropertiesSelector.H"
+#include "rhoFluidThermo.H"
 
-// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+#include "pureMixture.H"
 
-inline Foam::scalar Foam::coolPropPropertiesSelector::sigma
-(
-    const scalar p,
-    const scalar T
-) const
+#include "forCoolprop.H"
+
+#include "makeFluidThermo.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
 {
-    return properties().sigma(p, T);
+    forCoolprop(makeFluidThermo, rhoFluidThermo, pureMixture);
 }
-
-
-inline Foam::scalar Foam::coolPropPropertiesSelector::mu
-(
-    const scalar p,
-    const scalar T
-) const
-{
-    return properties().mu(p, T);
-}
-
 
 // ************************************************************************* //

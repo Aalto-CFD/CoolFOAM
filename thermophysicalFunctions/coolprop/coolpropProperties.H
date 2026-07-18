@@ -23,40 +23,58 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::coolPropProperties
+    Foam::coolpropProperties
 
 Authors
     Stanislau Stasheuski, Aalto University, 2025-2026.
     stanislau.stasheuski[at]aalto.fi
 
 Description
-    Thermophysical properties wrapper to evaluate the standard CoolProp
-    thermodynamics packages through its low-level interface.
+    Thermophysical properties evaluator backing the CoolProp thermodynamics
+    stack (Foam::Coolprop, Foam::CoolpropThermo and Foam::CoolpropTransport)
+    through the CoolProp low-level interface. Selected by
 
     \verbatim
     thermoType
     {
         type            heRhoThermo;
-        properties      coolprop;
         mixture         pureMixture;
+        transport       coolprop;
+        thermo          coolprop;
+        equationOfState coolprop;
+        specie          specie;
         energy          sensibleInternalEnergy;
     }
 
-    // Any CoolProp fluid name with optional explicit backend prefix
-    // https://coolprop.org/fluid_properties/PurePseudoPure.html
     mixture
     {
-        BICUBIC&HEOS::H2O;
+        // Any CoolProp fluid name with optional explicit backend prefix
+        // https://coolprop.org/fluid_properties/PurePseudoPure.html
+        equationOfState
+        {
+            type            coolprop;
+            fluid           BICUBIC&HEOS::H2O;
 
-        // Optional; "liquid" (default) or "gas". The gas role reports the
-        // real CoolProp compressibility (psi), Cp - Cv and internal energy
-        // (ea/es) instead of the liquidProperties incompressible contract
-        // (psi = 0, CpMCv = 0, ea = ha). Needed for fluids at conditions
-        // where the liquid role is meaningless, e.g. a permanent gas such
-        // as Air at typical ambient temperature (T >> Tc)
-        phase           gas;
+            // Optional; "liquid" (default) or "gas". The gas role reports
+            // the real CoolProp compressibility (psi), Cp - Cv and internal
+            // energy (ea/es) instead of the liquidProperties incompressible
+            // contract (psi = 0, CpMCv = 0, ea = ha). Needed for fluids at
+            // conditions where the liquid role is meaningless, e.g. a
+            // permanent gas such as Air at typical ambient temperature
+            // (T >> Tc)
+            phase           gas;
+        }
+        thermodynamics  { $equationOfState; }
+        transport
+        {
+            mu              { $equationOfState; }
+            kappa           { $equationOfState; }
+        }
     }
     \endverbatim
+
+    It also remains a Foam::liquidProperties, usable wherever those are
+    (e.g. Lagrangian liquid thermodynamics).
 
     Reference:
     \verbatim
@@ -66,12 +84,12 @@ Description
     \endverbatim
 
 SourceFiles
-    coolPropProperties.C
+    coolpropProperties.C
 
 \*---------------------------------------------------------------------------*/
 
-#ifndef coolPropProperties_H
-#define coolPropProperties_H
+#ifndef coolpropProperties_H
+#define coolpropProperties_H
 
 #include "liquidProperties.H"
 #include "APIdiffusionCoefficient.H"
@@ -83,10 +101,10 @@ namespace Foam
 {
 
 /*---------------------------------------------------------------------------*\
-                     Class coolPropProperties Declaration
+                     Class coolpropProperties Declaration
 \*---------------------------------------------------------------------------*/
 
-class coolPropProperties
+class coolpropProperties
 :
     public liquidProperties
 {
@@ -182,7 +200,7 @@ private:
 
         //- Construct from the fluid specification, imposed phase and a
         //  constructed state
-        coolPropProperties
+        coolpropProperties
         (
             const word& fluid,
             const long state,
@@ -200,42 +218,42 @@ public:
 
         //- Construct from the fluid specification, optionally imposing
         //  the gas phase (defaults to the liquid phase)
-        coolPropProperties
+        coolpropProperties
         (
             const word& fluid,
             const phaseType phase = phaseType::liquid
         );
 
         //- Construct from dictionary
-        coolPropProperties(const dictionary& dict);
+        coolpropProperties(const dictionary& dict);
 
         //- Copy constructor
-        coolPropProperties(const coolPropProperties& cpp);
+        coolpropProperties(const coolpropProperties& cpp);
 
         //- Construct and return clone
         virtual autoPtr<liquidProperties> clone() const
         {
-            return autoPtr<liquidProperties>(new coolPropProperties(*this));
+            return autoPtr<liquidProperties>(new coolpropProperties(*this));
         }
 
 
     // Selectors
 
-        //- Return a pointer to a new coolPropProperties created from
+        //- Return a pointer to a new coolpropProperties created from
         //  the fluid specification, optionally imposing the gas phase
-        static autoPtr<coolPropProperties> New
+        static autoPtr<coolpropProperties> New
         (
             const word& fluid,
             const phaseType phase = phaseType::liquid
         );
 
-        //- Return a pointer to a new coolPropProperties created from
+        //- Return a pointer to a new coolpropProperties created from
         //  dictionary
-        static autoPtr<coolPropProperties> New(const dictionary& dict);
+        static autoPtr<coolpropProperties> New(const dictionary& dict);
 
 
     //- Destructor
-    virtual ~coolPropProperties();
+    virtual ~coolpropProperties();
 
 
     // Member Functions
@@ -244,6 +262,12 @@ public:
         const word& fluid() const
         {
             return fluid_;
+        }
+
+        //- Return which phase the primary properties evaluate as
+        phaseType phase() const
+        {
+            return phase_;
         }
 
 
@@ -294,10 +318,10 @@ public:
             //  Liquid role: ea = ha (liquidProperties contract, incompressible
             //  so u ~= h). Gas role: the real CoolProp internal energy.
             //  Hides (does not override) liquidProperties::ea, which is
-            //  fine here: this class is only ever accessed through the
-            //  concrete coolPropPropertiesSelector, never a liquidProperties
-            //  base pointer, so the static (not dynamic) type always
-            //  resolves to this definition
+            //  fine here: this class is only ever accessed concretely,
+            //  through the layers of the Coolprop thermodynamics stack,
+            //  never a liquidProperties base pointer, so the static (not
+            //  dynamic) type always resolves to this definition
             scalar ea(scalar p, scalar T) const;
 
             //- Sensible internal energy of the primary phase [J/kg]
@@ -343,7 +367,8 @@ public:
             virtual scalar D(scalar p, scalar T, scalar Wb) const;
 
             //- Invert the vapour pressure relationship to retrieve the
-            //  boiling temperature as a function of pressure
+            //  boiling temperature as a function of pressure;
+            //  -1 below the triple pressure, as the base implementation
             virtual scalar pvInvert(scalar p) const;
 
 
