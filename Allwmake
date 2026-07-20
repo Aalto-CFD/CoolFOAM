@@ -4,32 +4,38 @@ cd ${0%/*} || exit 1    # Run from this directory
 # Parse arguments for library compilation
 . $WM_PROJECT_DIR/wmake/scripts/AllwmakeParseArguments
 
-# Download the pre-built CoolProp library with the CoolPropLib.h header
-: "${COOLPROP_VERSION:=8.0.0}"
-
-base="https://sourceforge.net/projects/coolprop/files/CoolProp"
-src="${base}/${COOLPROP_VERSION}/shared_library"
-
-# --fail so an HTTP error page is not silently saved as the header/library
-[ -e include/CoolPropLib.h ] ||
-    curl -fLO "${src}/CoolPropLib.h" \
-        --output-dir include --create-dirs || exit 1
-
-if [ ! -e "${FOAM_SITE_LIBBIN}/libCoolProp.so" ]
+if [ -z ${COOLPROP_INCLUDE_DIR+x} ] || [ -z ${COOLPROP_LIB_DIR+x} ]
 then
-    curl -fLO "${src}/$(uname)/64bit/libCoolProp.so" \
-        --output-dir "${FOAM_SITE_LIBBIN}" --create-dirs || exit 1
+    : "${COOLPROP_VERSION:=8.0.0}"
 
-    chmod +x "${FOAM_SITE_LIBBIN}/libCoolProp.so"
+    echo "    using prebuilt libCoolPropLib.so.$COOLPROP_VERSION"
+
+    base=https://sourceforge.net/projects/coolprop/files/CoolProp
+    src=$base/$COOLPROP_VERSION/shared_library
+
+    # fail so an HTTP error page is not silently saved as the header/library
+    [ -e include/CoolPropLib.h ] ||
+        curl -sfLO $src/CoolPropLib.h \
+            --output-dir lnInclude --create-dirs || exit 1
+
+    if [ ! -e $FOAM_SITE_LIBBIN/libCoolProp.so.$COOLPROP_VERSION ]
+    then
+        curl -sfLO $src/$(uname)/64bit/libCoolProp.so.$COOLPROP_VERSION \
+            --output-dir $FOAM_SITE_LIBBIN --create-dirs || exit 1
+        chmod +x $FOAM_SITE_LIBBIN/libCoolProp.so.$COOLPROP_VERSION
+    fi
+
+    ln -sf libCoolProp.so.$COOLPROP_VERSION \
+        "$FOAM_SITE_LIBBIN/libCoolProp.so.${COOLPROP_VERSION%%.*}"
+    ln -sf libCoolProp.so.$COOLPROP_VERSION \
+        $FOAM_SITE_LIBBIN/libCoolProp.so
+else
+    echo "    using COOLPROP_LIB_DIR=$COOLPROP_LIB_DIR"
+
+    mkdir -p $FOAM_SITE_LIBBIN
+    ln -sf $COOLPROP_INCLUDE_DIR/CoolProp/CoolPropLib.h ./include/
+    ln -sf $COOLPROP_LIB_DIR/lib* $FOAM_SITE_LIBBIN/
 fi
-
-# The library's SONAME is libCoolProp.so.<major>, which the dependent
-# libraries record as their runtime dependency; without these links the
-# dynamic linker cannot resolve it
-ln -sf libCoolProp.so \
-    "${FOAM_SITE_LIBBIN}/libCoolProp.so.${COOLPROP_VERSION}"
-ln -sf libCoolProp.so \
-    "${FOAM_SITE_LIBBIN}/libCoolProp.so.${COOLPROP_VERSION%%.*}"
 
 wmake $targetType
 wmake test/coolpropProperties
