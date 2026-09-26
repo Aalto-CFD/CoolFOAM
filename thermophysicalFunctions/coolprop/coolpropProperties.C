@@ -557,11 +557,6 @@ Foam::scalar Foam::coolpropProperties::alphav(scalar p, scalar T) const
 
 Foam::scalar Foam::coolpropProperties::psi(scalar p, scalar T) const
 {
-    if (phase_ == phaseType::liquid)
-    {
-        return 0;
-    }
-
     const long state = primaryState(p, T);
 
     return
@@ -572,11 +567,6 @@ Foam::scalar Foam::coolpropProperties::psi(scalar p, scalar T) const
 
 Foam::scalar Foam::coolpropProperties::CpMCv(scalar p, scalar T) const
 {
-    if (phase_ == phaseType::liquid)
-    {
-        return 0;
-    }
-
     const long state = primaryState(p, T);
 
     return
@@ -611,11 +601,6 @@ Foam::scalar Foam::coolpropProperties::ha(scalar p, scalar T) const
 
 Foam::scalar Foam::coolpropProperties::ea(scalar p, scalar T) const
 {
-    if (phase_ == phaseType::liquid)
-    {
-        return ha(p, T);
-    }
-
     return coolpropOutput(primaryState(p, T), coolprop().u, fluid_);
 }
 

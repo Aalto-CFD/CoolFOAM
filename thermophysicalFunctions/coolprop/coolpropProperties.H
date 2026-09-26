@@ -55,13 +55,10 @@ Description
             type            coolprop;
             fluid           BICUBIC&HEOS::H2O;
 
-            // Optional; "liquid" (default) or "gas". The gas role reports
-            // the real CoolProp compressibility (psi), Cp - Cv and internal
-            // energy (ea/es) instead of the liquidProperties incompressible
-            // contract (psi = 0, CpMCv = 0, ea = ha). Needed for fluids at
-            // conditions where the liquid role is meaningless, e.g. a
-            // permanent gas such as Air at typical ambient temperature
-            // (T >> Tc)
+            // Optional; "liquid" (default) or "gas": the imposed phase of
+            // the flash. Needed for fluids at conditions where the liquid
+            // role is meaningless, e.g. a permanent gas such as Air at
+            // typical ambient temperature (T >> Tc)
             phase           gas;
         }
         thermodynamics  { $equationOfState; }
@@ -111,9 +108,7 @@ class coolpropProperties
 public:
 
     //- Which phase this instance evaluates the primary properties as;
-    //  the liquid role (default) reproduces the incompressible
-    //  liquidProperties contract (psi = 0, CpMCv = 0, ea = ha) unchanged,
-    //  the gas role reports real CoolProp compressibility/energy
+    //  both roles report the real CoolProp compressibility/energy
     enum class phaseType
     {
         liquid,
@@ -280,17 +275,14 @@ public:
             virtual scalar alphav(scalar p, scalar T) const;
 
             //- Compressibility, drho/dp at constant T [s^2/m^2]
-            //  Zero for the liquid role (incompressible, per the
-            //  liquidProperties contract); the real CoolProp
-            //  isothermal compressibility for the gas role.
+            //  from the real CoolProp isothermal compressibility.
             //  Hides (does not override) liquidProperties::psi, which is
             //  non-virtual upstream; see the ea() note on why hiding is
             //  safe here
             scalar psi(scalar p, scalar T) const;
 
             //- Cp - Cv [J/kg/K]
-            //  Zero for the liquid role, as above; Cp minus the real
-            //  CoolProp Cv for the gas role.
+            //  Cp minus the real CoolProp Cv.
             //  Hides (does not override) liquidProperties::CpMCv; see the
             //  ea() note
             scalar CpMCv(scalar p, scalar T) const;
@@ -315,8 +307,8 @@ public:
 
             //- Absolute internal energy of the primary phase [J/kg]
             //  relative to the CoolProp reference state of the fluid.
-            //  Liquid role: ea = ha (liquidProperties contract, incompressible
-            //  so u ~= h). Gas role: the real CoolProp internal energy.
+            //  Unlike the liquidProperties contract (ea = ha), the real
+            //  CoolProp internal energy, as are psi and CpMCv above.
             //  Hides (does not override) liquidProperties::ea, which is
             //  fine here: this class is only ever accessed concretely,
             //  through the layers of the Coolprop thermodynamics stack,
@@ -325,8 +317,7 @@ public:
             scalar ea(scalar p, scalar T) const;
 
             //- Sensible internal energy of the primary phase [J/kg]
-            //  See ea() for the liquid/gas role distinction and the
-            //  non-virtual hiding note
+            //  See ea() for the non-virtual hiding note
             scalar es(scalar p, scalar T) const;
 
             //- Entropy of the primary phase [J/kg/K]

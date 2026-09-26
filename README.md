@@ -92,12 +92,15 @@ The `phase` entry selects which imposed-phase flash the primary properties
 (`rho`, `alphav`, `Cp`, `ha`, `ea`, `s`, `mu`, `kappa`, `psi`, `CpMCv`) come
 from:
 
-- **Liquid** (default): liquid-imposed flash, keeping the incompressible
-  `liquidProperties` contract (`psi = 0`, `CpMCv = 0`, `ea = ha`).
-- **Gas**: gas-imposed flash, with `psi`, `CpMCv` and `ea`/`es` reporting the
-  real CoolProp compressibility, `Cp - Cv` and internal energy. Use it where
-  the liquid role is not meaningful — a permanent gas such as Air at ambient
-  temperature (`T >> Tc`), or the vapour phase of a two-phase VoF case.
+- **Liquid** (default): liquid-imposed flash.
+- **Gas**: gas-imposed flash. Use it where the liquid role is not
+  meaningful — a permanent gas such as Air at ambient temperature
+  (`T >> Tc`), or the vapour phase of a two-phase VoF case.
+
+Both roles are compressible: `psi`, `CpMCv` and `ea`/`es` report the real
+CoolProp isothermal compressibility (`drho/dp` at constant `T`), `Cp - Cv`
+and internal energy, rather than the incompressible contract of the built-in
+`liquidProperties` (`psi = 0`, `CpMCv = 0`, `ea = ha`).
 
 Vapour-companion and saturation properties (`Cpg`, `mug`, `kappag`, `pv`,
 `hl`, `sigma`, `pvInvert`, `Tb`, `D`) are unaffected by `phase`.
@@ -132,16 +135,14 @@ Tsat            { type coolprop; fluid H2O; property Tsat; }
   are reference-independent.
 
 ## Limitations
-Shared with the built-in `liquidProperties` contract:
-- **Liquid role is incompressible** (`psi = 0`, `CpMCv = 0`) even though the
-  flash density does depend on pressure — accurate away from the critical
-  region, degrading as it is approached. The gas role reports the real
-  values and does not have this limitation.
+- **Compressibility diverges at the critical point**: `psi` (and `CpMCv`)
+  grow without bound as it is approached, stiffening the pressure equation.
 - **Saturated fallback sits at `psat(T)`, not the requested `p`**, so beyond
   the metastable region the pressure dependence is lost and identities
   combining a primary property with the input `p` (e.g. `ha - ea` vs
-  `p/rho`) hold only where the direct flash succeeds. Derivative outputs
-  (`alphav`, `Cp`, gas-role `psi`/`CpMCv`) are evaluated at the saturation
+  `p/rho`, or `psi` vs the change of `rho` with `p`) hold only where the
+  direct flash succeeds. Derivative outputs
+  (`alphav`, `Cp`, `psi`, `CpMCv`) are evaluated at the saturation
   endpoint (`Q = 0` liquid, `Q = 1` gas); a backend that refuses first
   derivatives exactly on the saturation line raises a fatal error there
   (the default HEOS backend works — `Test-coolpropProperties` exercises

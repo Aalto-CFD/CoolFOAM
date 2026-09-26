@@ -36,7 +36,8 @@ Description
     metastable-fallback region (same points as the liquid role, deliberately
     subcooled from the gas role's point of view) and a genuinely superheated
     point, cross-checking against physical identities and the liquid role's
-    vapour-companion properties (mug, kappag, Cpg).
+    vapour-companion properties (mug, kappag, Cpg). The liquid role's
+    compressibility (psi, CpMCv, ea) is cross-checked the same way.
 
 Authors
     Stanislau Stasheuski, Aalto University, 2026.
@@ -113,6 +114,33 @@ void printGasProperties
 }
 
 
+// Prints psi, CpMCv and ha - ea at (p, T) alongside their physical
+// cross-checks: psi against a central difference of rho in p,
+// CpMCv against T*alphav^2/psi (Cp - Cv = T*alphav^2/(rho*kappaT)) and
+// ha - ea against p/rho. The identities hold where the direct flash
+// succeeds, not in the saturated fallback (e.g. liquid Air at 300 K)
+void printCompressibility
+(
+    const coolpropProperties& l,
+    scalar p,
+    scalar T
+)
+{
+    const scalar dp = 1e-4*p;
+    const scalar psi = l.psi(p, T);
+
+    Info<< "    (p = " << p << " Pa, T = " << T << " K)"
+        << " psi = " << psi
+        << " (drho/dp = "
+        << (l.rho(p + dp, T) - l.rho(p - dp, T))/(2*dp) << ")"
+        << " CpMCv = " << l.CpMCv(p, T)
+        << " (T*alphav^2/psi = " << T*sqr(l.alphav(p, T))/psi << ")"
+        << " ha-ea = " << l.ha(p, T) - l.ea(p, T)
+        << " (p/rho = " << p/l.rho(p, T) << ")"
+        << endl;
+}
+
+
 int main(int argc, char *argv[])
 {
     wordList fluids;
@@ -181,11 +209,14 @@ int main(int argc, char *argv[])
             printGasProperties(gasPtr(), coolPtr(), gasPs[i], gasTs[i]);
         }
 
-        // The liquid role must stay exactly incompressible, unaffected by
-        // the gas role's psi/CpMCv overrides
-        Info<< "    Liquid role: psi = " << coolPtr().psi(ps[0], Ts[0])
-            << " CpMCv = " << coolPtr().CpMCv(ps[0], Ts[0])
-            << " (both should be 0)" << endl;
+        // The liquid role is compressible too
+        Info<< nl << "CoolProp " << fluid << " (liquid role compressibility):"
+            << endl;
+
+        forAll(ps, i)
+        {
+            printCompressibility(coolPtr(), ps[i], Ts[i]);
+        }
     }
 
     Info<< nl << "End" << nl << endl;
