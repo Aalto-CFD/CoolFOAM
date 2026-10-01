@@ -9,7 +9,10 @@ The [CoolProp](https://coolprop.org/) wrapper for [OpenFOAM](https://github.com/
   built on the standard thermodynamics packages can use any CoolProp fluid
   without code changes.
 - Supports the optional CoolProp backends (`REFPROP::`, `PCSAFT::`,
-  `BICUBIC&HEOS::`, ...) via the usual name prefix.
+  `BICUBIC&HEOS::`, ...) via the usual name prefix, including the
+  [SVDSBTL](https://coolprop.org/coolprop/SVDSBTL.html) tables recommended
+  for CFD (`SVDSBTL&REFPROP::`, `SVDSBTL&HEOS::`, `SVDSBTL&IF97::`), see
+  below.
 - Uses the low-level C interface of the CoolProp shared library, which the
   build downloads pre-built — CoolProp is never compiled locally.
 
@@ -45,7 +48,7 @@ thermoType
 mixture
 {
     // Any CoolProp fluid name, with optional backend prefix:
-    // H2O; BICUBIC&HEOS::PROPANE; PCSAFT::PROPANE;
+    // H2O; SVDSBTL&HEOS::H2O; BICUBIC&HEOS::PROPANE; PCSAFT::PROPANE;
     // REFPROP::IOCTANE (requires COOLPROP_REFPROP_ROOT to be set)
     // https://coolprop.org/fluid_properties/PurePseudoPure.html
     equationOfState
@@ -134,6 +137,34 @@ Tsat            { type coolprop; fluid H2O; property Tsat; }
   `hf`/`ef` are their values at standard conditions, so the sensible energies
   are reference-independent.
 
+### SVDSBTL tables
+The SVDSBTL backend evaluates `rho`, `h`, `e`, `s`, `mu` and `kappa` from
+SVD-compressed tables of its source backend (the part after `&`), but it
+neither imposes the phase nor provides the heat capacities, derivatives,
+surface tension or acentric factor. For an `SVDSBTL&<Source>::` fluid:
+- The imposed phase is enforced by rejecting a table state on the other side
+  of the saturation curve (denser/lighter than critical) or beyond the table
+  (below the triple point, where it returns NaN), falling back to the table
+  state off the saturation curve at `T`: `psat(T)(1 - 1e-4)` for the gas,
+  and `psat(T) + 1e4 Pa` for the liquid, whose table states closer to
+  saturation are replaced by this fallback too (the `SVDSBTL&REFPROP::H2O`
+  table is wrong by up to 100% in liquid density within 10% of `psat` below
+  275 K).
+- The table has no metastable states, so from this fallback `rho`, `ha`,
+  `ea` and `s` are extrapolated linearly in `p` with the derivatives below
+  (`drho = psi dp`, `dh = (1 - T alphav)/rho dp`, ...): a first-order
+  metastable extension, e.g. of a flashing liquid below `psat`, whose
+  density responds to pressure consistently with `psi` (freezing it at the
+  saturated value makes the pressure of a flashing VoF case run away).
+- `Cp`, `alphav`, `psi` and `CpMCv` come from the source backend, evaluated
+  explicitly (no flash) at the table density and temperature with the phase
+  imposed; `sigma`, `Cpg` and `omega` from the source backend as well.
+- The tables are built on first use (about a minute per input pair with
+  HEOS, several with REFPROP) into `~/.CoolProp/SVDTables`, and loaded from
+  there afterwards; build them once before a parallel run, e.g. by running
+  `Test-coolpropProperties 'SVDSBTL&REFPROP::H2O'`, rather than having
+  every rank build them at once.
+
 ## Limitations
 - **Compressibility diverges at the critical point**: `psi` (and `CpMCv`)
   grow without bound as it is approached, stiffening the pressure equation.
@@ -150,6 +181,12 @@ Tsat            { type coolprop; fluid H2O; property Tsat; }
 - **Fallback costs a failed flash**: in the region where the single-phase
   flash fails, every evaluation pays a failed pressure-temperature flash
   first. Matters only for cases sitting deep beyond saturation.
+- **SVDSBTL has no metastable states**: beyond saturation (e.g. the liquid
+  of a flashing flow below `psat`) the primary properties are extrapolated
+  linearly in `p` from next to the saturation curve at `T` (the gas density
+  floored at `1e-3` of that there), whereas the Helmholtz backends evaluate
+  the metastable states themselves; transport properties are those next to
+  the saturation curve.
 
 ## Compilation
 CoolFOAM is normally consumed as a git submodule of Aalto's `foamSite` and

@@ -126,6 +126,12 @@ private:
         //- Fluid specification, e.g. "H2O" or "REFPROP::H2O"
         const word fluid_;
 
+        //- Is the backend an SVDSBTL table, e.g. "SVDSBTL&REFPROP::H2O",
+        //  which neither imposes the phase nor provides the heat capacities,
+        //  derivatives, surface tension, acentric factor or saturated
+        //  endpoints of a flash
+        const bool tabulated_;
+
         //- Handle of the state evaluated at (p, T) with an imposed
         //  liquid phase
         const long liquidState_;
@@ -137,6 +143,13 @@ private:
         //- Handle of the state evaluated on the saturation curve
         const long saturationState_;
 
+        //- Handles of the states of the source backend of a tabulated
+        //  backend, e.g. "REFPROP::H2O", for the properties the table does
+        //  not provide (-1 otherwise): the derivatives of the primary
+        //  phase, and the other (surface tension, ideal-gas heat capacity)
+        const long derivState_;
+        const long sourceState_;
+
         // Cached conditions of the last state updates
 
             mutable scalar liquidP_, liquidT_;
@@ -144,6 +157,11 @@ private:
             mutable scalar pvT_, pv_;
             mutable scalar hlT_, hl_;
             mutable scalar sigmaT_, sigma_;
+            mutable scalar derivP_, derivT_;
+
+        // Cached derivatives of a tabulated backend
+
+            mutable scalar Cp_, alphav_, psi_, CpMCv_;
 
         //- Vapour diffusivity function (not provided by CoolProp)
         Function2s::APIdiffusionCoefficient D_;
@@ -185,13 +203,45 @@ private:
         //  falling back to the saturated vapour at T
         long vapour(scalar p, scalar T) const;
 
+        //- Update and return the given state on the saturation curve at
+        //  quality Q and temperature T limited to the [Tt, Tc] interval
+        long saturation(const long state, scalar Q, scalar T) const;
+
         //- Update and return the saturation state at quality Q and
         //  temperature T limited to the [Tt, Tc] interval
         long saturation(scalar Q, scalar T) const;
 
+        //- Is the updated state of a tabulated backend, which does not
+        //  impose the phase, within the table and on the side of the
+        //  saturation curve of the phase with the saturated quality Q at
+        //  temperature T
+        bool imposedSide(const long state, const scalar Q, const scalar T)
+            const;
+
+        //- Evaluate and cache the Cp, alphav, psi and CpMCv of a tabulated
+        //  backend at (p, T), which the table does not provide, from its
+        //  source backend at the density and temperature of the resolved
+        //  table state with the phase imposed
+        void derivatives(const scalar p, const scalar T) const;
+
         //- Update and return the state for the imposed primary phase_
         //  (liquid() or vapour()) at (p, T)
         long primaryState(scalar p, scalar T) const;
+
+        //- Return the pressure difference between p and the given primary
+        //  state at temperature T of a tabulated backend, non-zero for its
+        //  fallback next to the saturation curve, from which rho, ha, ea
+        //  and s are extrapolated linearly in p (a first-order metastable
+        //  extension consistent with psi, which the table does not
+        //  provide), limited to a small relative density change, except
+        //  for the density of the gas (not energy); zero otherwise
+        scalar metastableDp
+        (
+            const long state,
+            const scalar p,
+            const scalar T,
+            const bool energy
+        ) const;
 
         //- Construct from the fluid specification, imposed phase and a
         //  constructed state
